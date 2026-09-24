@@ -176,7 +176,22 @@ export default function ReportPothole() {
       formDataToSend.append('longitude', formData.longitude)
       if (formData.address) formDataToSend.append('address', formData.address)
       formDataToSend.append('image', imageFile)
-      
+      if (analysis) {
+        formDataToSend.append('reportAnalysis', JSON.stringify({
+          evidenceStatus: analysis.evidenceStatus,
+          status: analysis.status,
+          isPothole: analysis.isPothole,
+          confidence: analysis.confidence,
+          severity: analysis.severity,
+          defectType: analysis.defectType,
+          description: analysis.description,
+          environment: analysis.environment,
+          evidenceQuality: analysis.evidenceQuality,
+          message: analysis.message,
+          analyzedAt: new Date().toISOString()
+        }))
+      }
+
       const response = await complaintAPI.create(formDataToSend)
       setComplaintId(response.data.complaint.complaintId)
       setSubmitResult(response.data.complaint)

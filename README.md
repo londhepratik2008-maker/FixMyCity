@@ -64,6 +64,7 @@ Citizen snaps a photo
 ### 👨‍💼 Citizen
 - 📸 Report a pothole with photo + live GPS location
 - 🤖 Instant AI evidence check (real confidence % — no fake 50% fallbacks)
+- 🧾 Permanent AI report analysis saved with the report (defect type, confidence, evidence quality) — visible on every detail page, survives all status changes
 - 📍 Location names on reports (not raw coordinates in your face)
 - 📊 Live progress timeline: Reported → Assigned → Repair → Verified
 - 🔔 Real-time notifications at every status change
@@ -73,19 +74,22 @@ Citizen snaps a photo
 - 📈 Analytics with status breakdown charts
 - 👷 Contractor management & one-click assignment
 - 🔍 Verification center with scored AI results + manual override
+- ✅ Verification scorecard with per-criterion score bars — persists through VERIFIED and RESOLVED on all three role views
 - ⚖️ Judge Demo — simulate Perfect / Fraudulent / Ambiguous cases
 
 ### 👷 Contractor
 - 📋 Assignment queue with priorities
 - ▶️ Start repair → submit after-photo + GPS as proof
-- 🛡️ AI checks the proof photo is a real repaired road (not a random pic)
+- ⚡ **Live AI verification on photo upload** — verdict + confidence panel appears *before* you submit; photos that don't show a completed repair are blocked from submission
+- 🛡️ AI re-checks the proof photo is a real repaired road (not a random pic) at submit time
 - 📉 Rejected? Clear reasons + resubmit flow
 
 ### 🧠 AI Layer
 | Gate | Model / Method | What it does |
 |------|----------------|--------------|
 | Report validation | **Gemini vision** | Pothole? severity, defect type, evidence quality |
-| Repair proof | **Gemini vision** | `REPAIR_VISIBLE` / `NOT_A_REPAIR` / `UNCERTAIN` |
+| Repair proof (upload-time) | **Gemini vision** (`/api/ai/check-repair-photo`) | Live verdict on photo select — blocks bad photos *before* submission |
+| Repair proof (submit-time) | **Gemini vision** | Server re-check → `REPAIR_VISIBLE` / `NOT_A_REPAIR` / `UNCERTAIN` |
 | Before vs after | **OpenCV SIFT** (Flask) | GPS + viewpoint + landmark + scene + pothole match → 0–100 |
 | Scoring | Explainable breakdown | Every point traceable to a reason |
 
@@ -122,10 +126,14 @@ FixMyCity/
 ├── server/          # Express + Mongoose REST API
 │   ├── sample-assets/   # seed photos (POTH / repair sets)
 │   └── src/
+│       ├── app.js       # Express app (serverless-ready split)
+│       ├── db.js        # Mongo connection (Atlas or local)
+│       ├── config/      # uploads dir (local vs /tmp on Vercel)
 │       ├── controllers/
 │       ├── models/
 │       ├── routes/
-│       └── services/gemini.js
+│       ├── services/gemini.js
+│       └── tests/
 ├── ai-service/      # Flask + OpenCV before/after verifier
 ├── POTH1-4.jpg      # test fixtures (positive)
 └── NOPOTH1-4.png    # test fixtures (negative / repaired)
@@ -141,7 +149,7 @@ FixMyCity/
 | Backend | Node.js, Express, Mongoose, JWT auth, Multer |
 | Database | MongoDB (local or in-memory auto-fallback) |
 | AI | Google Gemini 3.5 Flash (vision), Flask + OpenCV SIFT |
-| Testing | Node test runner (20 API tests), Playwright (UI smoke + retry) |
+| Testing | Node test runner (26 API tests), Playwright suites (UI, scorecard, repair-AI live check, retry) |
 
 ---
 
@@ -201,8 +209,8 @@ curl -X POST http://localhost:5000/api/seed
 
 **Try this flow:**
 1. Log in as **Municipal** → assign / review complaints
-2. Log in as **Contractor** → start a repair, upload `NOPOTH*.png` as proof → watch the AI verdict
-3. Upload `POTH*.jpg` as “repair proof” → watch it get **REJECTED** by the proof gate
+2. Log in as **Contractor** → start a repair, upload `NOPOTH*.png` as proof → the live AI panel accepts it instantly
+3. Upload `POTH*.jpg` as “repair proof” → the live panel **REJECTS it before you can even submit**; submit anyway with a real photo → server re-checks + scores
 4. Log in as **Citizen** → see timeline + notifications
 
 ---
@@ -211,8 +219,12 @@ curl -X POST http://localhost:5000/api/seed
 
 | Suite | Result |
 |-------|--------|
-| Server API tests | **20/20** pass (incl. live Gemini POTH / NOPOTH) |
-| UI smoke checks | **15/15** pass |
+| Server API tests | **26/26** pass (incl. live Gemini POTH / NOPOTH) |
+| Scorecard persists through RESOLVED | **17/17** pass |
+| Report analysis persists permanently | **20/20** pass |
+| UI checks | **15/15** pass |
+| Score bar rendering | **7/7** pass |
+| Live repair-photo AI (upload → verdict → block) | **14/14** pass |
 | Retry / error recovery | **8/8** pass |
 | Repair proof gate | Positive + negative live-verified |
 | Seed photos | 5/5 unique (no duplicate thumbnails) |
@@ -226,6 +238,7 @@ curl -X POST http://localhost:5000/api/seed
 | POST | `/api/auth/login` | JWT + cookie auth |
 | POST | `/api/complaints` | Report pothole (photo + GPS) |
 | POST | `/api/ai/validate-image` | Gemini report gate |
+| POST | `/api/ai/check-repair-photo` | Live upload-time proof check (blocks bad photos before submit) |
 | POST | `/api/complaints/:id/assign` | Assign contractor |
 | POST | `/api/contractor/:id/repair-submission` | Proof gate (Gemini + SIFT) |
 | GET | `/api/complaints/stats` | Dashboard stats |

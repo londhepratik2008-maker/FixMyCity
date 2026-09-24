@@ -8,6 +8,7 @@ import LocationMap, { LocationSummary } from '../components/LocationMap'
 import { describeLocation } from '../utils/geocode'
 import { getStatusMarkerColor } from '../utils/map'
 import VerificationPanel from '../components/VerificationPanel'
+import ReportAnalysisPanel from '../components/ReportAnalysisPanel'
 import JudgeDemoPanel from '../components/JudgeDemoPanel'
 
 const statusTimeline = [
@@ -67,8 +68,10 @@ export default function MunicipalComplaintDetail() {
   const handleStatusChange = async (newStatus) => {
     setUpdating(true)
     try {
-      await complaintAPI.updateStatus(id, newStatus)
-      setComplaint(prev => ({ ...prev, status: newStatus }))
+      const res = await complaintAPI.updateStatus(id, newStatus)
+      const updated = res.data?.complaint
+      if (updated) setComplaint(updated)
+      else setComplaint(prev => ({ ...prev, status: newStatus }))
     } catch (err) {
       alert('Failed to update status')
     } finally {
@@ -188,7 +191,7 @@ export default function MunicipalComplaintDetail() {
                           {formatDate(complaint[step.key.toLowerCase() === 'under_repair' ? 'assignedAt' : step.key.toLowerCase() + 'At'])}
                         </p>
                       )}
-                      {step.key === 'VERIFIED' && complaint.verificationResultId && (
+                      {['VERIFIED', 'RESOLVED'].includes(step.key) && complaint.verificationResultId && (
                         <p className="text-sm text-[var(--accent-green)] mt-1">Score: {complaint.verificationResultId.totalScore}/100</p>
                       )}
                     </div>
@@ -282,6 +285,11 @@ export default function MunicipalComplaintDetail() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* AI Report Validation — permanent report-time analysis */}
+          {complaint.reportAnalysis && (
+            <ReportAnalysisPanel analysis={complaint.reportAnalysis} complaintId={complaint.complaintId} />
           )}
 
           {/* AI Verification Result — premium panel */}
@@ -526,11 +534,11 @@ export default function MunicipalComplaintDetail() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">GPS Distance</span>
-                  <span className="font-medium text-[var(--text-primary)]">{complaint.verificationResultId.distanceMeters.toFixed(1)}m</span>
+                  <span className="font-medium text-[var(--text-primary)]">{typeof complaint.verificationResultId.distanceMeters === 'number' ? `${complaint.verificationResultId.distanceMeters.toFixed(1)}m` : '—'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Processing</span>
-                  <span className="font-medium text-[var(--text-primary)]">{complaint.verificationResultId.processingTimeMs}ms</span>
+                  <span className="font-medium text-[var(--text-primary)]">{complaint.verificationResultId.processingTimeMs != null ? `${complaint.verificationResultId.processingTimeMs}ms` : '—'}</span>
                 </div>
               </CardContent>
             </Card>

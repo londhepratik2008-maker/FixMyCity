@@ -66,6 +66,37 @@ const complaintSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VerificationResult'
   },
+  reportAnalysis: {
+    evidenceStatus: {
+      type: String,
+      enum: ['ACCEPTED', 'INVALID_EVIDENCE', 'MANUAL_REVIEW']
+    },
+    status: {
+      type: String,
+      enum: ['POTHOLE_DETECTED', 'NO_POTHOLE', 'ERROR']
+    },
+    isPothole: Boolean,
+    confidence: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    severity: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL', null]
+    },
+    defectType: String,
+    description: String,
+    environment: String,
+    evidenceQuality: {
+      type: String,
+      enum: ['GOOD', 'FAIR', 'POOR', 'INSUFFICIENT', null]
+    },
+    message: String,
+    analyzedAt: {
+      type: Date
+    }
+  },
   reportedAt: {
     type: Date,
     default: Date.now

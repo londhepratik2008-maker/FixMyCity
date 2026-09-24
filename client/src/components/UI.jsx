@@ -236,14 +236,15 @@ export const SkeletonList = ({ rows = 3 }) => (
 
 export const ProgressBar = ({ value, max = 100, className = '', showLabel = true, color }) => {
   const percentage = Math.min(100, Math.max(0, (value / max) * 100))
-  const barColor = color || (percentage >= 80 ? 'bg-[var(--accent-green)]' : percentage >= 60 ? 'bg-[var(--accent-amber)]' : 'bg-[var(--accent-red)]')
-  
+  const barClass = color ? '' : (percentage >= 80 ? 'bg-[var(--accent-green)]' : percentage >= 60 ? 'bg-[var(--accent-amber)]' : 'bg-[var(--accent-red)]')
+  const barStyle = color ? { width: `${percentage}%`, backgroundColor: color } : { width: `${percentage}%` }
+
   return (
     <div className={className}>
       <div className="h-2.5 bg-[var(--border-subtle)] rounded-full overflow-hidden">
         <div 
-          className={`${barColor} h-full rounded-full transition-all duration-500`}
-          style={{ width: `${percentage}%` }}
+          className={`${barClass} h-full rounded-full transition-all duration-500`}
+          style={barStyle}
         />
       </div>
       {showLabel && (

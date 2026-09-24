@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { contractorAPI } from '../utils/api'
+import { contractorAPI, aiAPI } from '../utils/api'
 import { formatDate, formatRelativeTime, getSeverityColor, getStatusColor, getStatusLabel, getDecisionColor, getConfidenceColor, validateImageFile, createObjectURL, revokeObjectURL, getSeverityBadgeVariant, getBadgeVariant, IMAGE_FALLBACK } from '../utils/helpers'
 import { MapPin, Calendar, AlertTriangle, Camera, CheckCircle, AlertCircle, XCircle, Loader2, Map, ChevronLeft, Play, Upload, Image, X, Check, Zap } from 'lucide-react'
 import { Button, Card, CardContent, CardHeader, Badge, ProgressBar, Alert, Spinner, EmptyState, Modal, Input, CoordsBadge } from '../components/UI'
@@ -8,6 +8,8 @@ import LocationMap, { LocationSummary } from '../components/LocationMap'
 import { describeLocation, reverseGeocode } from '../utils/geocode'
 import { getStatusMarkerColor } from '../utils/map'
 import VerificationPanel from '../components/VerificationPanel'
+import ReportAnalysisPanel from '../components/ReportAnalysisPanel'
+import RepairPhotoAnalysis from '../components/RepairPhotoAnalysis'
 import JudgeDemoPanel from '../components/JudgeDemoPanel'
 
 const statusTimeline = [
@@ -41,6 +43,12 @@ export default function ContractorComplaintDetail() {
   const [repairNotes, setRepairNotes] = useState('')
   const geocodeTimerRef = useRef(null)
 
+  // Live AI proof-of-repair check on the after-repair photo
+  const [repairAIState, setRepairAIState] = useState('idle')
+  const [repairAIResult, setRepairAIResult] = useState(null)
+  const [repairAIError, setRepairAIError] = useState(null)
+  const repairAISeqRef = useRef(0)
+
   useEffect(() => {
     const fetchComplaint = async () => {
       setLoading(true)
@@ -67,6 +75,28 @@ export default function ContractorComplaintDetail() {
     return statusTimeline.findIndex(s => s.key === complaint.status)
   }
 
+  const runRepairPhotoCheck = async (file) => {
+    const seq = ++repairAISeqRef.current
+    setRepairAIState('analyzing')
+    setRepairAIResult(null)
+    setRepairAIError(null)
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      const res = await aiAPI.checkRepairPhoto(fd)
+      if (seq !== repairAISeqRef.current) return
+      setRepairAIResult(res.data)
+      setRepairAIState('done')
+    } catch (err) {
+      if (seq !== repairAISeqRef.current) return
+      setRepairAIError({
+        code: err.response?.data?.errorCode || 'UNKNOWN',
+        message: err.response?.data?.message || 'AI verification failed. Please try again.'
+      })
+      setRepairAIState('error')
+    }
+  }
+
   const handleRepairImageChange = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -82,13 +112,18 @@ export default function ContractorComplaintDetail() {
     setRepairImageError('')
     setRepairImage(file)
     setRepairPreview(createObjectURL(file))
+    runRepairPhotoCheck(file)
   }
 
   const removeRepairImage = () => {
+    repairAISeqRef.current += 1
     if (repairPreview) revokeObjectURL(repairPreview)
     setRepairImage(null)
     setRepairPreview(null)
     setRepairImageError('')
+    setRepairAIState('idle')
+    setRepairAIResult(null)
+    setRepairAIError(null)
   }
 
   const handleSubmitRepair = async (e) => {
@@ -97,6 +132,14 @@ export default function ContractorComplaintDetail() {
     
     if (!repairImage) {
       setSubmitError('After-repair photo is required')
+      return
+    }
+    if (repairAIState === 'analyzing') {
+      setSubmitError('AI verification of the photo is still running — please wait a moment')
+      return
+    }
+    if (repairAIResult?.blocksSubmission) {
+      setSubmitError('AI rejected this photo as it does not show completed repair work. Please upload a photo of the repaired road surface.')
       return
     }
     if (!repairLatitude || !repairLongitude) {
@@ -112,8 +155,10 @@ export default function ContractorComplaintDetail() {
       formData.append('longitude', repairLongitude)
       if (repairNotes) formData.append('notes', repairNotes)
       
-      await contractorAPI.submitRepair(id, formData)
-      navigate(`/contractor/complaint/${id}`, { replace: true })
+      const res = await contractorAPI.submitRepair(id, formData)
+      const updated = res.data?.complaint
+      if (updated) setComplaint(updated)
+      else navigate(`/contractor/complaint/${id}`, { replace: true })
     } catch (err) {
       setSubmitError(err.response?.data?.error || 'Failed to submit repair evidence')
     } finally {
@@ -229,7 +274,7 @@ export default function ContractorComplaintDetail() {
                           {formatDate(complaint[step.key.toLowerCase() === 'under_repair' ? 'assignedAt' : step.key.toLowerCase() + 'At'])}
                         </p>
                       )}
-                      {step.key === 'VERIFIED' && complaint.verificationResultId && (
+                      {['VERIFIED', 'RESOLVED'].includes(step.key) && complaint.verificationResultId && (
                         <p className="text-sm text-green-600 mt-1">Score: {complaint.verificationResultId.totalScore}/100</p>
                       )}
                     </div>
@@ -350,6 +395,13 @@ export default function ContractorComplaintDetail() {
                       </label>
                     </div>
                     {repairImageError && <p className="mt-2 text-sm text-red-600">{repairImageError}</p>}
+                    <RepairPhotoAnalysis
+                      state={repairAIState}
+                      result={repairAIResult}
+                      error={repairAIError}
+                      previewUrl={repairPreview}
+                      onRetry={() => repairImage && runRepairPhotoCheck(repairImage)}
+                    />
                   </div>
 
                   {/* GPS Location */}
@@ -423,7 +475,7 @@ export default function ContractorComplaintDetail() {
                     <Button type="button" variant="outline" onClick={() => navigate('/contractor/dashboard')} className="flex-1">
                       Cancel
                     </Button>
-                    <Button type="submit" loading={submitting} className="flex-1" size="lg">
+                    <Button type="submit" loading={submitting} disabled={repairAIState === 'analyzing'} className="flex-1" size="lg" data-testid="submit-repair">
                       <Upload className="w-5 h-5" />
                       Submit Repair Evidence
                     </Button>
@@ -473,7 +525,7 @@ export default function ContractorComplaintDetail() {
                   </div>
                   <div>
                     <p className="text-slate-500">Distance from Original</p>
-                    {complaint.verificationResultId && (
+                    {complaint.verificationResultId && typeof complaint.verificationResultId.distanceMeters === 'number' && (
                       <p className="font-mono text-xs">{complaint.verificationResultId.distanceMeters.toFixed(1)}m</p>
                     )}
                   </div>
@@ -503,6 +555,11 @@ export default function ContractorComplaintDetail() {
               </CardContent>
             </Card>
           ) : null}
+
+          {/* AI Report Validation — permanent report-time analysis */}
+          {complaint.reportAnalysis && (
+            <ReportAnalysisPanel analysis={complaint.reportAnalysis} complaintId={complaint.complaintId} />
+          )}
 
           {/* AI Verification Result — premium panel */}
           {complaint.verificationResultId && (
@@ -626,7 +683,7 @@ export default function ContractorComplaintDetail() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">GPS Distance</span>
-                  <span className="font-medium">{complaint.verificationResultId.distanceMeters.toFixed(1)}m</span>
+                  <span className="font-medium">{typeof complaint.verificationResultId.distanceMeters === 'number' ? `${complaint.verificationResultId.distanceMeters.toFixed(1)}m` : '—'}</span>
                 </div>
               </CardContent>
             </Card>

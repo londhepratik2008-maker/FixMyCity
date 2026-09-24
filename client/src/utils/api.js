@@ -60,4 +60,8 @@ export const notificationAPI = {
   markAllAsRead: () => api.patch('/notifications/read-all')
 }
 
+export const aiAPI = {
+  checkRepairPhoto: (data) => api.post('/ai/check-repair-photo', data, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
 export default api

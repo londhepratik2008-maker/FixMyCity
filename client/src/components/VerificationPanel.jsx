@@ -1,13 +1,12 @@
-import { useMemo } from 'react'
 import { Badge, ProgressBar, Card, CardContent, CardHeader } from '../components/UI'
 import { CheckCircle, XCircle, AlertCircle, HelpCircle, MapPin, Eye, Landmark, Route, AlertTriangle } from 'lucide-react'
 
 const criteria = [
-  { key: 'gps', label: 'GPS Match', weight: 30, icon: MapPin, color: 'var(--accent-blue)' },
-  { key: 'viewpoint', label: 'Viewpoint Match', weight: 20, icon: Eye, color: 'var(--accent-purple)' },
-  { key: 'landmark', label: 'Landmark Visibility', weight: 20, icon: Landmark, color: 'var(--accent-amber)' },
-  { key: 'roadScene', label: 'Road Scene Match', weight: 20, icon: Route, color: 'var(--accent-green)' },
-  { key: 'pothole', label: 'Pothole Match', weight: 10, icon: AlertTriangle, color: 'var(--accent-red)' },
+  { key: 'gpsScore', label: 'GPS Match', weight: 30, icon: MapPin, color: 'var(--accent-blue)' },
+  { key: 'viewpointScore', label: 'Viewpoint Match', weight: 20, icon: Eye, color: 'var(--accent-purple)' },
+  { key: 'landmarkScore', label: 'Landmark Visibility', weight: 20, icon: Landmark, color: 'var(--accent-amber)' },
+  { key: 'roadSceneScore', label: 'Road Scene Match', weight: 20, icon: Route, color: 'var(--accent-green)' },
+  { key: 'potholeScore', label: 'Pothole Match', weight: 10, icon: AlertTriangle, color: 'var(--accent-red)' },
 ]
 
 const decisionConfig = {
@@ -18,8 +17,8 @@ const decisionConfig = {
 
 export default function VerificationPanel({ result, complaintId, isDemo = false, demoCase = null }) {
   const displayResult = isDemo && demoCase ? demoCase : result
-  
-  if (!displayResult) {
+
+  if (!displayResult || typeof displayResult !== 'object' || typeof displayResult.totalScore !== 'number') {
     return (
       <Card className="border-[var(--border-subtle)]">
         <CardContent className="p-6 text-center">
@@ -43,11 +42,11 @@ export default function VerificationPanel({ result, complaintId, isDemo = false,
   const decisionStyle = decisionConfig[decision] || decisionConfig.MANUAL_REVIEW
   const DecisionIcon = decisionStyle.icon
   
-  const progressBars = useMemo(() => criteria.map(c => ({
+  const progressBars = criteria.map(c => ({
     ...c,
-    value: displayResult[c.key] || 0,
+    value: Number(displayResult[c.key]) || 0,
     max: c.weight
-  })), [displayResult])
+  }))
 
   return (
     <Card className="border-[var(--border-subtle)] overflow-hidden">

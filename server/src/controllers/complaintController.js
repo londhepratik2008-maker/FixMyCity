@@ -26,9 +26,52 @@ const createNotification = async (userId, type, title, message, relatedComplaint
   });
 };
 
+const sanitizeReportAnalysis = (raw) => {
+  if (!raw) return null;
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const evidenceStatuses = ['ACCEPTED', 'INVALID_EVIDENCE', 'MANUAL_REVIEW'];
+  const statuses = ['POTHOLE_DETECTED', 'NO_POTHOLE', 'ERROR'];
+  const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  const qualities = ['GOOD', 'FAIR', 'POOR', 'INSUFFICIENT'];
+
+  const confidence = Number(parsed.confidence);
+  const result = {
+    evidenceStatus: evidenceStatuses.includes(parsed.evidenceStatus) ? parsed.evidenceStatus : undefined,
+    status: statuses.includes(parsed.status) ? parsed.status : undefined,
+    isPothole: typeof parsed.isPothole === 'boolean' ? parsed.isPothole : undefined,
+    confidence: Number.isFinite(confidence) ? Math.min(100, Math.max(0, Math.round(confidence))) : undefined,
+    severity: severities.includes(String(parsed.severity || '').toUpperCase())
+      ? String(parsed.severity).toUpperCase()
+      : null,
+    defectType: typeof parsed.defectType === 'string' ? parsed.defectType.slice(0, 120) : undefined,
+    description: typeof parsed.description === 'string' ? parsed.description.slice(0, 1000) : undefined,
+    environment: typeof parsed.environment === 'string' ? parsed.environment.slice(0, 1000) : undefined,
+    evidenceQuality: qualities.includes(String(parsed.evidenceQuality || '').toUpperCase())
+      ? String(parsed.evidenceQuality).toUpperCase()
+      : null,
+    message: typeof parsed.message === 'string' ? parsed.message.slice(0, 1000) : undefined,
+    analyzedAt: parsed.analyzedAt && !Number.isNaN(Date.parse(parsed.analyzedAt))
+      ? new Date(parsed.analyzedAt)
+      : new Date()
+  };
+
+  Object.keys(result).forEach((k) => result[k] === undefined && delete result[k]);
+  if (!result.evidenceStatus && !result.status && result.confidence === undefined) return null;
+  return result;
+};
+
 export const createComplaint = async (req, res) => {
   try {
-    const { title, description, severity, latitude, longitude, address } = req.body;
+    const { title, description, severity, latitude, longitude, address, reportAnalysis } = req.body;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
     if (!imageUrl) {
@@ -37,6 +80,7 @@ export const createComplaint = async (req, res) => {
 
     const complaintId = generateComplaintId();
     const assignedAuthority = assignAuthority({ title, description, address, severity });
+    const sanitizedAnalysis = sanitizeReportAnalysis(reportAnalysis);
 
     const complaint = await Complaint.create({
       complaintId,
@@ -50,7 +94,8 @@ export const createComplaint = async (req, res) => {
       address,
       assignedAuthority,
       status: 'REPORTED',
-      reportedAt: new Date()
+      reportedAt: new Date(),
+      ...(sanitizedAnalysis ? { reportAnalysis: sanitizedAnalysis } : {})
     });
 
     await createNotification(
@@ -201,6 +246,12 @@ export const updateComplaintStatus = async (req, res) => {
 
     await complaint.save();
 
+    const populated = await Complaint.findById(complaint._id)
+      .populate('citizenId', 'name email phone')
+      .populate('contractorId', 'name email phone')
+      .populate('repairSubmissionId')
+      .populate('verificationResultId');
+
     await createNotification(
       complaint.citizenId,
       'COMPLAINT_ASSIGNED',
@@ -219,7 +270,7 @@ export const updateComplaintStatus = async (req, res) => {
       );
     }
 
-    res.json({ complaint });
+    res.json({ complaint: populated });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update status' });
   }

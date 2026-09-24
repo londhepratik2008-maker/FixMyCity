@@ -169,7 +169,20 @@ const seed = async () => {
       address: 'Eastern Express Highway, Thane',
       status: 'VERIFIED',
       assignedAt: new Date('2026-01-15'),
-      reportedAt: new Date('2026-01-10')
+      reportedAt: new Date('2026-01-10'),
+      reportAnalysis: {
+        evidenceStatus: 'ACCEPTED',
+        status: 'POTHOLE_DETECTED',
+        isPothole: true,
+        confidence: 92,
+        severity: 'HIGH',
+        defectType: 'Pothole',
+        description: 'Large deep pothole in asphalt lane with broken edge crumbling into adjacent lane.',
+        environment: 'Multi-lane urban highway, daytime, dry surface, metal guardrail on left.',
+        evidenceQuality: 'GOOD',
+        message: 'Pothole detected with 92% confidence. Evidence accepted.',
+        analyzedAt: new Date('2026-01-10')
+      }
     },
     {
       complaintId: 'FM-2026-0002',
@@ -183,7 +196,20 @@ const seed = async () => {
       address: 'Ghodbunder Road, Near Majiwada Junction, Thane',
       status: 'MANUAL_REVIEW',
       assignedAt: new Date('2026-01-20'),
-      reportedAt: new Date('2026-01-18')
+      reportedAt: new Date('2026-01-18'),
+      reportAnalysis: {
+        evidenceStatus: 'ACCEPTED',
+        status: 'POTHOLE_DETECTED',
+        isPothole: true,
+        confidence: 81,
+        severity: 'MEDIUM',
+        defectType: 'Pothole',
+        description: 'Irregular pothole near junction edge with water pooling inside cavity.',
+        environment: 'Signalized junction, overcast light, wet road surface after rain.',
+        evidenceQuality: 'FAIR',
+        message: 'Pothole detected with 81% confidence. Evidence accepted.',
+        analyzedAt: new Date('2026-01-18')
+      }
     },
     {
       complaintId: 'FM-2026-0003',
@@ -197,7 +223,20 @@ const seed = async () => {
       address: 'Pokhran Road No. 1, Thane West',
       status: 'REJECTED',
       assignedAt: new Date('2026-01-25'),
-      reportedAt: new Date('2026-01-22')
+      reportedAt: new Date('2026-01-22'),
+      reportAnalysis: {
+        evidenceStatus: 'MANUAL_REVIEW',
+        status: 'POTHOLE_DETECTED',
+        isPothole: true,
+        confidence: 64,
+        severity: 'LOW',
+        defectType: 'Pothole',
+        description: 'Possible shallow surface defect near school zone markings; image partially shadowed.',
+        environment: 'Residential road near school, partial shade, dry surface.',
+        evidenceQuality: 'FAIR',
+        message: 'Possible pothole but only 64% confidence — sent for manual review.',
+        analyzedAt: new Date('2026-01-22')
+      }
     },
     {
       complaintId: 'FM-2026-0004',
@@ -209,7 +248,20 @@ const seed = async () => {
       longitude: 72.9700,
       address: 'Thane Station Road, Near Jambli Naka, Thane',
       status: 'REPORTED',
-      reportedAt: new Date('2026-02-01')
+      reportedAt: new Date('2026-02-01'),
+      reportAnalysis: {
+        evidenceStatus: 'ACCEPTED',
+        status: 'POTHOLE_DETECTED',
+        isPothole: true,
+        confidence: 88,
+        severity: 'MEDIUM',
+        defectType: 'Pothole',
+        description: 'Fresh circular pothole with sharp rim near pedestrian crossing paint.',
+        environment: 'Busy station road, daytime, damp surface, footpath and median visible.',
+        evidenceQuality: 'GOOD',
+        message: 'Pothole detected with 88% confidence. Evidence accepted.',
+        analyzedAt: new Date('2026-02-01')
+      }
     },
     {
       complaintId: 'FM-2026-0005',
@@ -223,7 +275,20 @@ const seed = async () => {
       address: 'Kolshet Road, Thane West',
       status: 'UNDER_REPAIR',
       assignedAt: new Date('2026-02-05'),
-      reportedAt: new Date('2026-02-03')
+      reportedAt: new Date('2026-02-03'),
+      reportAnalysis: {
+        evidenceStatus: 'ACCEPTED',
+        status: 'POTHOLE_DETECTED',
+        isPothole: true,
+        confidence: 95,
+        severity: 'CRITICAL',
+        defectType: 'Pothole',
+        description: 'Very large deep pothole spanning wheel track with exposed base course.',
+        environment: 'Approach road near mall, high traffic, daytime, dry asphalt.',
+        evidenceQuality: 'GOOD',
+        message: 'Pothole detected with 95% confidence. Evidence accepted.',
+        analyzedAt: new Date('2026-02-03')
+      }
     }
   ];
 

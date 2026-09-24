@@ -202,6 +202,45 @@ function parseRepairJson(text) {
 }
 
 /**
+ * Live repair-proof analysis from an in-memory image buffer.
+ * Throws typed errors: GEMINI_NOT_CONFIGURED, GEMINI_TIMEOUT, GEMINI_NETWORK,
+ * GEMINI_RATE_LIMIT, GEMINI_API_ERROR, GEMINI_INVALID_RESPONSE.
+ * Returns { verdict: REPAIR_VISIBLE | NOT_A_REPAIR | UNCERTAIN, confidence, notes }.
+ */
+export async function analyzeRepairProof({ imageBase64, mimeType = 'image/jpeg', timeoutMs = 30000 } = {}) {
+  if (!isGeminiConfigured()) {
+    const err = new Error('Gemini API key not configured. Add GEMINI_API_KEY to server/.env or a key line in server/.gemini-key.');
+    err.code = 'GEMINI_NOT_CONFIGURED';
+    throw err;
+  }
+  if (!imageBase64) {
+    const err = new Error('Repair image is required.');
+    err.code = 'GEMINI_INVALID_RESPONSE';
+    throw err;
+  }
+
+  const text = await askGeminiVision(REPAIR_PROOF_PROMPT, { imageBase64, mimeType, timeoutMs });
+  const parsed = parseRepairJson(text);
+  if (!parsed || typeof parsed.isRepairProof !== 'boolean') {
+    const err = new Error('AI returned an unparseable response');
+    err.code = 'GEMINI_INVALID_RESPONSE';
+    throw err;
+  }
+
+  const confidence = Math.max(0, Math.min(100, Number(parsed.confidence) || 0));
+  const notes = String(parsed.notes || '').slice(0, 500);
+
+  if (confidence < 70) {
+    return { verdict: 'UNCERTAIN', confidence, notes };
+  }
+  return {
+    verdict: parsed.isRepairProof ? 'REPAIR_VISIBLE' : 'NOT_A_REPAIR',
+    confidence,
+    notes
+  };
+}
+
+/**
  * Gemini check that a submitted repair-proof image actually shows completed repair work.
  * Never throws — returns { verdict, confidence, notes }.
  * verdict: REPAIR_VISIBLE | NOT_A_REPAIR | UNCERTAIN | SKIPPED
@@ -216,23 +255,7 @@ export async function checkRepairProof(filePath) {
     const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
     const imageBase64 = fs.readFileSync(filePath).toString('base64');
 
-    const text = await askGeminiVision(REPAIR_PROOF_PROMPT, { imageBase64, mimeType, timeoutMs: 30000 });
-    const parsed = parseRepairJson(text);
-    if (!parsed || typeof parsed.isRepairProof !== 'boolean') {
-      return skipped('AI returned an unparseable response');
-    }
-
-    const confidence = Math.max(0, Math.min(100, Number(parsed.confidence) || 0));
-    const notes = String(parsed.notes || '').slice(0, 500);
-
-    if (confidence < 70) {
-      return { verdict: 'UNCERTAIN', confidence, notes };
-    }
-    return {
-      verdict: parsed.isRepairProof ? 'REPAIR_VISIBLE' : 'NOT_A_REPAIR',
-      confidence,
-      notes
-    };
+    return await analyzeRepairProof({ imageBase64, mimeType, timeoutMs: 30000 });
   } catch (e) {
     return skipped(e.message || 'AI check failed');
   }

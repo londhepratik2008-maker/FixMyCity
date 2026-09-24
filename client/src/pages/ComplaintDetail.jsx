@@ -9,6 +9,7 @@ import LocationMap, { LocationSummary } from '../components/LocationMap'
 import { describeLocation } from '../utils/geocode'
 import { getStatusMarkerColor } from '../utils/map'
 import VerificationPanel from '../components/VerificationPanel'
+import ReportAnalysisPanel from '../components/ReportAnalysisPanel'
 import JudgeDemoPanel from '../components/JudgeDemoPanel'
 
 const statusTimeline = [
@@ -139,7 +140,7 @@ export default function ComplaintDetail() {
                           {formatDate(complaint[step.key.toLowerCase() === 'under_repair' ? 'assignedAt' : step.key.toLowerCase() + 'At'])}
                         </p>
                       )}
-                      {step.key === 'VERIFIED' && complaint.verificationResultId && (
+                      {['VERIFIED', 'RESOLVED'].includes(step.key) && complaint.verificationResultId && (
                         <p className="text-sm text-[var(--accent-green)] mt-1">Score: {complaint.verificationResultId.totalScore}/100</p>
                       )}
                     </div>
@@ -232,6 +233,11 @@ export default function ComplaintDetail() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* AI Report Validation — permanent report-time analysis */}
+          {complaint.reportAnalysis && (
+            <ReportAnalysisPanel analysis={complaint.reportAnalysis} complaintId={complaint.complaintId} />
           )}
 
           {/* AI Verification Result — premium panel */}
@@ -346,7 +352,7 @@ export default function ComplaintDetail() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">GPS Distance</span>
-                  <span className="font-medium text-[var(--text-primary)]">{complaint.verificationResultId.distanceMeters.toFixed(1)}m</span>
+                  <span className="font-medium text-[var(--text-primary)]">{typeof complaint.verificationResultId.distanceMeters === 'number' ? `${complaint.verificationResultId.distanceMeters.toFixed(1)}m` : '—'}</span>
                 </div>
               </CardContent>
             </Card>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { isGeminiConfigured, askGeminiVision } from '../services/gemini.js';
+import { isGeminiConfigured, askGeminiVision, analyzeRepairProof } from '../services/gemini.js';
 
 const router = Router();
 
@@ -130,6 +130,25 @@ function errorResponse(res, httpStatus, errorCode, message, extra = {}) {
   return res.status(httpStatus).json({ status: 'ERROR', errorCode, message, ...extra });
 }
 
+function geminiErrorResponse(res, err) {
+  const code = err.code || 'GEMINI_API_ERROR';
+  const httpByCode = {
+    GEMINI_NOT_CONFIGURED: 503,
+    GEMINI_TIMEOUT: 504,
+    GEMINI_RATE_LIMIT: 429,
+    GEMINI_NETWORK: 502,
+    GEMINI_INVALID_RESPONSE: 502
+  };
+  const http = httpByCode[code] || 502;
+  const clientMessage =
+    code === 'GEMINI_TIMEOUT' ? 'AI analysis timed out. Please try again.'
+    : code === 'GEMINI_RATE_LIMIT' ? 'AI rate limit exceeded. Please try again shortly.'
+    : code === 'GEMINI_NETWORK' ? 'AI analysis is temporarily unavailable due to a network issue. Please try again.'
+    : code === 'GEMINI_NOT_CONFIGURED' ? err.message
+    : 'AI analysis is temporarily unavailable. Please try again.';
+  return errorResponse(res, http, code, clientMessage);
+}
+
 function uploadSingle(field) {
   return (req, res, next) => {
     memoryUpload.single(field)(req, res, (err) => {
@@ -181,22 +200,7 @@ router.post('/validate-image', uploadSingle('image'), async (req, res) => {
         timeoutMs: 45000
       });
     } catch (err) {
-      const code = err.code || 'GEMINI_API_ERROR';
-      const httpByCode = {
-        GEMINI_NOT_CONFIGURED: 503,
-        GEMINI_TIMEOUT: 504,
-        GEMINI_RATE_LIMIT: 429,
-        GEMINI_NETWORK: 502,
-        GEMINI_INVALID_RESPONSE: 502
-      };
-      const http = httpByCode[code] || 502;
-      const clientMessage =
-        code === 'GEMINI_TIMEOUT' ? 'AI analysis timed out. Please try again.'
-        : code === 'GEMINI_RATE_LIMIT' ? 'AI rate limit exceeded. Please try again shortly.'
-        : code === 'GEMINI_NETWORK' ? 'AI analysis is temporarily unavailable due to a network issue. Please try again.'
-        : code === 'GEMINI_NOT_CONFIGURED' ? err.message
-        : 'AI analysis is temporarily unavailable. Please try again.';
-      return errorResponse(res, http, code, clientMessage);
+      return geminiErrorResponse(res, err);
     }
 
     const parsed = extractJson(text);
@@ -218,6 +222,58 @@ router.post('/validate-image', uploadSingle('image'), async (req, res) => {
     }
     console.error('validate-image unexpected error:', error);
     return errorResponse(res, 500, 'INTERNAL_ERROR', 'AI analysis failed unexpectedly. Please try again.');
+  }
+});
+
+router.post('/check-repair-photo', uploadSingle('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(res, 400, 'NO_IMAGE', 'Repair photo is required.');
+    }
+
+    if (!isGeminiConfigured()) {
+      return errorResponse(
+        res,
+        503,
+        'GEMINI_NOT_CONFIGURED',
+        'AI verification is not configured. Add a Gemini API key to server/.env (GEMINI_API_KEY) or server/.gemini-key, then restart the server.'
+      );
+    }
+
+    let analysis;
+    try {
+      analysis = await analyzeRepairProof({
+        imageBase64: req.file.buffer.toString('base64'),
+        mimeType: req.file.mimetype,
+        timeoutMs: 45000
+      });
+    } catch (err) {
+      return geminiErrorResponse(res, err);
+    }
+
+    const blocksSubmission = analysis.verdict === 'NOT_A_REPAIR';
+    let message;
+    if (analysis.verdict === 'REPAIR_VISIBLE') {
+      message = `Repair photo accepted (${analysis.confidence}% confidence) — the image shows completed repair work.`;
+    } else if (analysis.verdict === 'NOT_A_REPAIR') {
+      message = `This photo does not appear to show completed repair work (${analysis.confidence}% confidence). Upload a photo of the repaired road surface.`;
+    } else {
+      message = `AI could not confirm this shows a completed repair (${analysis.confidence}% confidence). You can submit it, but an officer will review it manually.`;
+    }
+
+    return res.json({ ...analysis, blocksSubmission, message });
+  } catch (error) {
+    if (error instanceof multer.MulterError) {
+      const msg = error.code === 'LIMIT_FILE_SIZE'
+        ? 'Image too large. Maximum size is 10MB.'
+        : `Upload error: ${error.message}`;
+      return errorResponse(res, 400, 'UPLOAD_ERROR', msg);
+    }
+    if (error.message?.includes('Invalid file type')) {
+      return errorResponse(res, 400, 'INVALID_TYPE', error.message);
+    }
+    console.error('check-repair-photo unexpected error:', error);
+    return errorResponse(res, 500, 'INTERNAL_ERROR', 'AI verification failed unexpectedly. Please try again.');
   }
 });
 
